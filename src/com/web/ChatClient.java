@@ -14,6 +14,8 @@ import java.security.SecureRandom;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.KeySpec;
 import java.util.ArrayList;
+import java.util.Arrays;
+
 import org.apache.commons.codec.binary.Base64;
 import sun.misc.BASE64Decoder;
 import sun.misc.BASE64Encoder;
@@ -288,8 +290,8 @@ public class ChatClient implements ActionListener {
 		btnRegister.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
 				String email= regEmail.getText();
-				char[] password = regPassword.getText().toCharArray();
-				byte[] salt_masterkey = null;
+				String password = regPassword.getText();
+				byte[] salt_masterkey1 = null;
 				Key publicKey = null;
 				Key privateKey = null;
 				String privkey_user_enc = null;
@@ -297,13 +299,26 @@ public class ChatClient implements ActionListener {
 				
 				//get Salt
 				try {
-					salt_masterkey = getSalt();
+					salt_masterkey1 = getSalt();
 				} catch (NoSuchAlgorithmException e1) {
 					e1.printStackTrace();
 				}
+				
+				String saltString = null;
+				try {
+					saltString = new String(salt_masterkey1, "UTF-8");
+				} catch (UnsupportedEncodingException e2) {
+					e2.printStackTrace();
+				}
+				byte[] salt_masterkey = null;
+				try {
+					salt_masterkey = saltString.getBytes("UTF-8");
+				} catch (UnsupportedEncodingException e2) {
+					e2.printStackTrace();
+				}
 				//generate masterkey
 				try {
-					masterkey = deriveKey(password.toString(), salt_masterkey, 256);
+					masterkey = deriveKey(password, salt_masterkey, 256);
 				} catch (Exception e1) {
 					e1.printStackTrace();
 				}
@@ -315,26 +330,19 @@ public class ChatClient implements ActionListener {
 					KeyPair kp = kpg.genKeyPair();
 					publicKey = kp.getPublic();
 					privateKey = kp.getPrivate();
+					//System.out.println(privateKey.getEncoded().toString());
 				} catch (Exception e1) {
 					e1.printStackTrace();
 				}
 				//generate privkey_user_enc
 				privkey_user_enc = encrypt(masterkey, privateKey);
-				
-				System.out.println(salt_masterkey);
-				
-				BASE64Encoder encoder = new BASE64Encoder();
-				String salt_masterkeyString = encoder.encode(salt_masterkey);
-				System.out.println(salt_masterkeyString);
-		
 	            try {
 					new Resty().json("http://localhost:3000/",form(data("identity", email),
-							data("salt_masterkey", salt_masterkeyString),
+							data("salt_masterkey", saltString),
 							data("pubkey_user",publicKey.toString()),
 							data("privkey_user_enc", privkey_user_enc)
 							));
 				} catch (Exception e1) {
-					// TODO Auto-generated catch block
 					e1.printStackTrace();
 				}
 			}
@@ -343,7 +351,7 @@ public class ChatClient implements ActionListener {
 		btnLogin.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
 				String email= loginEmail.getText();
-				char[] password = loginPassword.getText().toCharArray();
+				String password = loginPassword.getText();
 				byte[] masterkey = null;
 				
 				Resty r = new Resty();
@@ -355,31 +363,33 @@ public class ChatClient implements ActionListener {
 				} catch (JSONException e1) {
 					e1.printStackTrace();
 				}				
-				String salt_masterkeyString;
+				String salt_masterkeyString = null;
 				String privkey_user_encString = null;
-				String pubkey_userString;
+				String pubkey_userString = null;
 				byte[] salt_masterkey = null;
 				try {
 					salt_masterkeyString = user.getString("salt_masterkey");
 					privkey_user_encString = user.getString("privkey_user_enc");
 					pubkey_userString = user.getString("pubkey_user");	
-					System.out.println("" + salt_masterkeyString);
-					
-					BASE64Decoder decoder = new BASE64Decoder();
-					salt_masterkey = decoder.decodeBuffer(salt_masterkeyString);
-					System.out.println("" + salt_masterkey);
+
 				} catch (Exception e1) {
 					e1.printStackTrace();
 				}
+				
+				try {
+					salt_masterkey = salt_masterkeyString.getBytes("UTF-8");
+				} catch (UnsupportedEncodingException e2) {
+					e2.printStackTrace();
+				}
+				
 				//generate masterkey
 				try {
-					masterkey = deriveKey(password.toString(), salt_masterkey, 256);
+					masterkey = deriveKey(password, salt_masterkey, 256);
 				} catch (Exception e1) {
 					e1.printStackTrace();
 				}
 				
 				String privkeyString = decrypt(privkey_user_encString, masterkey);
-			
 				System.out.println(privkeyString);
 			}
 		});
@@ -392,15 +402,15 @@ public class ChatClient implements ActionListener {
         return salt;
     }
     public byte[] deriveKey(String password, byte[] salt, int keyLen) throws NoSuchAlgorithmException, InvalidKeySpecException {
+    		
         SecretKeyFactory kf = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
-        KeySpec specs = new PBEKeySpec(password.toCharArray(), salt, 10000, keyLen);
+        KeySpec specs = new PBEKeySpec(password.trim().toCharArray(), salt, 10000, keyLen);
         SecretKey key = kf.generateSecret(specs);
         return key.getEncoded();
     }
     public static String encrypt(byte[] masterkey, Key privKey)
     {
-    	SecretKey masterkey_enc = new SecretKeySpec(masterkey, 0, masterkey.length, "AES");
-    	
+    	SecretKey masterkey_enc = new SecretKeySpec(masterkey, 0, masterkey.length, "AES");		
         try
         {
             Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5Padding");
@@ -417,6 +427,7 @@ public class ChatClient implements ActionListener {
     public static String decrypt(String strToDecrypt, byte[] masterkey)
     {
     	SecretKey masterkey_enc = new SecretKeySpec(masterkey, 0, masterkey.length, "AES");
+    
         try
         {
         	Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5Padding");

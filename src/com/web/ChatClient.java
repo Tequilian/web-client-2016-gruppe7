@@ -57,8 +57,8 @@ public class ChatClient implements ActionListener {
 	JFrame f3;
 	private List user_list;
 	
-	private JTextField loginField;
-	private JPasswordField passwordField;
+	private JTextField loginEmail;
+	private JPasswordField loginPassword;
 	private JLabel lblPassword;
 	
 	private JTextField regEmail;
@@ -157,16 +157,16 @@ public class ChatClient implements ActionListener {
 
 /////////////////////////////////////////////////////////////////////////////////////////////
 //1		
-		loginField = new JTextField();
-		loginField.setFont(UIManager.getFont("FormattedTextField.font"));
-		loginField.setBounds(126, 156, 147, 40);
-		p1.add(loginField);
-		loginField.setColumns(10);
+		loginEmail = new JTextField();
+		loginEmail.setFont(UIManager.getFont("FormattedTextField.font"));
+		loginEmail.setBounds(126, 156, 147, 40);
+		p1.add(loginEmail);
+		loginEmail.setColumns(10);
 		
-		passwordField = new JPasswordField();
-		passwordField.setFont(UIManager.getFont("PasswordField.font"));
-		passwordField.setBounds(285, 156, 147, 40);
-		p1.add(passwordField);
+		loginPassword = new JPasswordField();
+		loginPassword.setFont(UIManager.getFont("PasswordField.font"));
+		loginPassword.setBounds(285, 156, 147, 40);
+		p1.add(loginPassword);
 		
 		JButton btnLogin = new JButton("Login");
 		btnLogin.setBounds(444, 156, 156, 40);
@@ -187,7 +187,7 @@ public class ChatClient implements ActionListener {
 		regEmail.setFont(UIManager.getFont("FormattedTextField.font"));
 		regEmail.setBounds(126, 156, 147, 40);
 		p2.add(regEmail);
-		loginField.setColumns(10);
+		loginEmail.setColumns(10);
 		
 		regPassword = new JPasswordField();
 		regPassword.setFont(UIManager.getFont("PasswordField.font"));
@@ -281,7 +281,7 @@ public class ChatClient implements ActionListener {
 		b8.addActionListener(this);
 		b9.addActionListener(this);
 
-		//-----------------------CLICK LISTENER-----------------------//
+		//-----------------------CLICK LISTENER REGISTER-----------------------//
 		btnRegister.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
 				String email= regEmail.getText();
@@ -371,6 +371,78 @@ public class ChatClient implements ActionListener {
 					// TODO Auto-generated catch block
 					e1.printStackTrace();
 				}
+			}
+		});
+		//----------------------ON CLICK LISTENER LOGIN------------------------------------
+		btnLogin.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				String email= loginEmail.getText();
+				char[] password = loginPassword.getText().toCharArray();
+				
+				Resty r = new Resty();
+				JSONObject user = new JSONObject();
+				try {
+					user = r.json("http://web2016team7.herokuapp.com/" + email).object();
+				} catch (IOException e1) {
+					e1.printStackTrace();
+				} catch (JSONException e1) {
+					e1.printStackTrace();
+				}
+				
+				String salt_masterkeyString;
+				String privkey_user_encString;
+				String pubkey_userString;
+				byte[] salt_masterkey = null;
+				byte[] privkey_user_enc = null;
+				byte[] pubkey_user = null;
+				try {
+					salt_masterkeyString = user.getString("salt_masterkey");
+					privkey_user_encString = user.getString("privkey_user_enc");
+					pubkey_userString = user.getString("pubkey_user");
+				
+	                salt_masterkey = salt_masterkeyString.getBytes();
+	                privkey_user_enc = privkey_user_encString.getBytes();
+	                pubkey_user = pubkey_userString.getBytes();
+				
+				} catch (Exception e1) {
+					e1.printStackTrace();
+				}
+				
+				
+				SecretKey masterkey = null;
+				try {
+					SecretKeyFactory secretKeyFactory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
+					KeySpec keySpec = new PBEKeySpec(password, salt_masterkey, 1000, 256);
+					SecretKey tmp = secretKeyFactory.generateSecret(keySpec);
+					masterkey = new SecretKeySpec(tmp.getEncoded(), "AES");
+				} catch (NoSuchAlgorithmException e1) {
+					e1.printStackTrace();
+				} catch (InvalidKeySpecException e1) {
+					e1.printStackTrace();
+				}
+				
+				
+				byte[] privkey_user = null;
+		            try {
+						Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5Padding");
+						cipher.init(Cipher.UNWRAP_MODE,masterkey);
+
+						Key privkey_user_key = cipher.unwrap(privkey_user_enc, "AES", Cipher.SECRET_KEY);
+		                privkey_user = privkey_user_key.getEncoded();
+						
+					} catch (InvalidKeyException e1) {
+						// TODO Auto-generated catch block
+						e1.printStackTrace();
+					} catch (NoSuchAlgorithmException e1) {
+						// TODO Auto-generated catch block
+						e1.printStackTrace();
+					} catch (NoSuchPaddingException e1) {
+						// TODO Auto-generated catch block
+						e1.printStackTrace();
+					}
+				System.out.println(privkey_user);
+				
+				
 			}
 		});
 	}

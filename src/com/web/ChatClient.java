@@ -3,16 +3,31 @@ package com.web;
 import java.awt.EventQueue;
 import java.awt.Color;
 import java.awt.event.*;
+import java.io.IOException;
+import java.security.InvalidKeyException;
+import java.security.Key;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
+import java.security.spec.InvalidKeySpecException;
+import java.security.spec.KeySpec;
 import java.util.ArrayList;
+import org.apache.commons.codec.binary.Base64;
 
 import javax.swing.JFrame;
+import javax.crypto.*; 
+import javax.crypto.spec.*; 
+import java.security.*;
 import javax.swing.JButton;
 import javax.swing.JPanel;
 
 import us.monoid.json.JSONArray;
+import us.monoid.json.JSONException;
 import us.monoid.json.JSONObject;
 import us.monoid.web.JSONResource;
 import us.monoid.web.Resty;
+import static us.monoid.web.Resty.*;
 
 import java.awt.CardLayout;
 import javax.swing.JLabel;
@@ -46,8 +61,8 @@ public class ChatClient implements ActionListener {
 	private JPasswordField passwordField;
 	private JLabel lblPassword;
 	
-	private JTextField loginField2;
-	private JPasswordField passwordField2;
+	private JTextField regEmail;
+	private JPasswordField regPassword;
 	private JLabel lblPassword2;
 
 
@@ -59,7 +74,7 @@ public class ChatClient implements ActionListener {
 			public void run() {
 				try {
 					ChatClient window = new ChatClient();
-					window.frame.setVisible(true);
+					window.f1.setVisible(true);
 				} catch (Exception e) {
 					e.printStackTrace();
 				}
@@ -168,20 +183,20 @@ public class ChatClient implements ActionListener {
 		p1.add(lblPassword);
 /////////////////////////////////////////////////////////////////////////////////////////////
 		//2
-		loginField2 = new JTextField();
-		loginField2.setFont(UIManager.getFont("FormattedTextField.font"));
-		loginField2.setBounds(126, 156, 147, 40);
-		p2.add(loginField2);
+		regEmail = new JTextField();
+		regEmail.setFont(UIManager.getFont("FormattedTextField.font"));
+		regEmail.setBounds(126, 156, 147, 40);
+		p2.add(regEmail);
 		loginField.setColumns(10);
 		
-		passwordField2 = new JPasswordField();
-		passwordField2.setFont(UIManager.getFont("PasswordField.font"));
-		passwordField2.setBounds(285, 156, 147, 40);
-		p2.add(passwordField2);
+		regPassword = new JPasswordField();
+		regPassword.setFont(UIManager.getFont("PasswordField.font"));
+		regPassword.setBounds(285, 156, 147, 40);
+		p2.add(regPassword);
 		
-		JButton btnLogin2 = new JButton("Register");
-		btnLogin2.setBounds(444, 156, 156, 40);
-		p2.add(btnLogin2);
+		JButton btnRegister = new JButton("Register");
+		btnRegister.setBounds(444, 156, 156, 40);
+		p2.add(btnRegister);
 		
 		JLabel lblUsername2 = new JLabel("E-Mail");
 		lblUsername2.setFont(new Font("Tahoma", Font.PLAIN, 18));
@@ -266,6 +281,98 @@ public class ChatClient implements ActionListener {
 		b8.addActionListener(this);
 		b9.addActionListener(this);
 
+		//-----------------------CLICK LISTENER-----------------------//
+		btnRegister.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				String email= regEmail.getText();
+				char[] password = regPassword.getText().toCharArray();
+				SecretKey masterkey = null;
+				
+				byte[] salt_masterkey = SecureRandom.getSeed(64);
+				
+	            try {
+					SecretKeyFactory secretKeyFactory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
+					KeySpec keySpec = new PBEKeySpec(password, salt_masterkey, 1000, 256);
+					SecretKey tmp = secretKeyFactory.generateSecret(keySpec);
+					masterkey = new SecretKeySpec(tmp.getEncoded(), "AES");
+				} catch (NoSuchAlgorithmException e1) {
+					// TODO Auto-generated catch block
+					e1.printStackTrace();
+				} catch (InvalidKeySpecException e1) {
+					// TODO Auto-generated catch block
+					e1.printStackTrace();
+				}
+				
+	            //KeyPair bilden
+	            KeyPairGenerator kpg = null;
+
+	            //KeyPairGenerator erzeugen --> Algorithmus: RSA 2048
+	            try {
+					kpg = KeyPairGenerator.getInstance("RSA");
+				} catch (NoSuchAlgorithmException e2) {
+					// TODO Auto-generated catch block
+					e2.printStackTrace();
+				}
+	            SecureRandom securerandom = new SecureRandom();
+	            byte bytes[] = new byte[20];
+	            securerandom.nextBytes(bytes);
+	            kpg.initialize(2048, securerandom);
+
+	            //KeyPair erzeugen
+	            KeyPair kp = kpg.genKeyPair();
+
+	            //publickey und privatekey in Variablen speichern
+	            Key pubkey_user = kp.getPublic();
+	            Key privkey_user = kp.getPrivate();
+	            byte[] privateKeyByte = privkey_user.getEncoded();
+	            byte[] publicKeyByte = pubkey_user.getEncoded();
+	            String pubKeyStr = new String(Base64.encodeBase64(publicKeyByte,false));
+
+	            // Die Anwendung verschlüsselt privkey_user via AES-ECB-128 mit masterkey zu
+	            //  privkey_user_enc.
+	            byte[] privkey_user_enc = null;
+	            try {
+					Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5Padding");
+					cipher.init(Cipher.WRAP_MODE,masterkey);
+					privkey_user_enc = cipher.wrap(privkey_user);
+				} catch (InvalidKeyException e1) {
+					// TODO Auto-generated catch block
+					e1.printStackTrace();
+				} catch (NoSuchAlgorithmException e1) {
+					// TODO Auto-generated catch block
+					e1.printStackTrace();
+				} catch (NoSuchPaddingException e1) {
+					// TODO Auto-generated catch block
+					e1.printStackTrace();
+				} catch (IllegalBlockSizeException e1) {
+					// TODO Auto-generated catch block
+					e1.printStackTrace();
+				}
+	            
+	            
+	            JSONObject regUser = new JSONObject();
+	            try {
+					regUser.put("identity", email);
+					regUser.put("salt_masterkey", salt_masterkey);
+					regUser.put("pubkey_user",pubkey_user);
+					regUser.put("privkey_user_enc", privkey_user_enc);
+				} catch (JSONException e1) {
+					// TODO Auto-generated catch block
+					e1.printStackTrace();
+				}
+	         
+	            try {
+					new Resty().json("http://web2016team7.herokuapp.com/",form(data("identity", email),
+							data("salt_masterkey", salt_masterkey.toString()),
+							data("pubkey_user",pubkey_user.toString()),
+							data("privkey_user_enc", privkey_user_enc.toString())
+							));
+				} catch (Exception e1) {
+					// TODO Auto-generated catch block
+					e1.printStackTrace();
+				}
+			}
+		});
 	}
 
 	public void actionPerformed(ActionEvent evt) {

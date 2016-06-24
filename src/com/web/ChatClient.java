@@ -4,6 +4,7 @@ import java.awt.EventQueue;
 import java.awt.Color;
 import java.awt.event.*;
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.security.InvalidKeyException;
 import java.security.Key;
 import java.security.KeyPair;
@@ -14,6 +15,8 @@ import java.security.spec.InvalidKeySpecException;
 import java.security.spec.KeySpec;
 import java.util.ArrayList;
 import org.apache.commons.codec.binary.Base64;
+import sun.misc.BASE64Decoder;
+import sun.misc.BASE64Encoder;
 
 import javax.swing.JFrame;
 import javax.crypto.*; 
@@ -286,86 +289,49 @@ public class ChatClient implements ActionListener {
 			public void actionPerformed(ActionEvent e) {
 				String email= regEmail.getText();
 				char[] password = regPassword.getText().toCharArray();
-				SecretKey masterkey = null;
+				byte[] salt_masterkey = null;
+				Key publicKey = null;
+				Key privateKey = null;
+				String privkey_user_enc = null;
+				byte[] masterkey = null;
 				
-				byte[] salt_masterkey = SecureRandom.getSeed(64);
-				
-	            try {
-					SecretKeyFactory secretKeyFactory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
-					KeySpec keySpec = new PBEKeySpec(password, salt_masterkey, 1000, 256);
-					SecretKey tmp = secretKeyFactory.generateSecret(keySpec);
-					masterkey = new SecretKeySpec(tmp.getEncoded(), "AES");
+				//get Salt
+				try {
+					salt_masterkey = getSalt();
 				} catch (NoSuchAlgorithmException e1) {
-					// TODO Auto-generated catch block
-					e1.printStackTrace();
-				} catch (InvalidKeySpecException e1) {
-					// TODO Auto-generated catch block
 					e1.printStackTrace();
 				}
+				//generate masterkey
+				try {
+					masterkey = deriveKey(password.toString(), salt_masterkey, 256);
+				} catch (Exception e1) {
+					e1.printStackTrace();
+				}
+				//generate KEYPAIR
+				KeyPairGenerator kpg;
+				try {
+					kpg = KeyPairGenerator.getInstance("RSA");				
+					kpg.initialize(2048);
+					KeyPair kp = kpg.genKeyPair();
+					publicKey = kp.getPublic();
+					privateKey = kp.getPrivate();
+				} catch (Exception e1) {
+					e1.printStackTrace();
+				}
+				//generate privkey_user_enc
+				privkey_user_enc = encrypt(masterkey, privateKey);
 				
-	            //KeyPair bilden
-	            KeyPairGenerator kpg = null;
-
-	            //KeyPairGenerator erzeugen --> Algorithmus: RSA 2048
+				System.out.println(salt_masterkey);
+				
+				BASE64Encoder encoder = new BASE64Encoder();
+				String salt_masterkeyString = encoder.encode(salt_masterkey);
+				System.out.println(salt_masterkeyString);
+		
 	            try {
-					kpg = KeyPairGenerator.getInstance("RSA");
-				} catch (NoSuchAlgorithmException e2) {
-					// TODO Auto-generated catch block
-					e2.printStackTrace();
-				}
-	            SecureRandom securerandom = new SecureRandom();
-	            byte bytes[] = new byte[20];
-	            securerandom.nextBytes(bytes);
-	            kpg.initialize(2048, securerandom);
-
-	            //KeyPair erzeugen
-	            KeyPair kp = kpg.genKeyPair();
-
-	            //publickey und privatekey in Variablen speichern
-	            Key pubkey_user = kp.getPublic();
-	            Key privkey_user = kp.getPrivate();
-	            byte[] privateKeyByte = privkey_user.getEncoded();
-	            byte[] publicKeyByte = pubkey_user.getEncoded();
-	            String pubKeyStr = new String(Base64.encodeBase64(publicKeyByte,false));
-
-	            // Die Anwendung verschlüsselt privkey_user via AES-ECB-128 mit masterkey zu
-	            //  privkey_user_enc.
-	            byte[] privkey_user_enc = null;
-	            try {
-					Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5Padding");
-					cipher.init(Cipher.WRAP_MODE,masterkey);
-					privkey_user_enc = cipher.wrap(privkey_user);
-				} catch (InvalidKeyException e1) {
-					// TODO Auto-generated catch block
-					e1.printStackTrace();
-				} catch (NoSuchAlgorithmException e1) {
-					// TODO Auto-generated catch block
-					e1.printStackTrace();
-				} catch (NoSuchPaddingException e1) {
-					// TODO Auto-generated catch block
-					e1.printStackTrace();
-				} catch (IllegalBlockSizeException e1) {
-					// TODO Auto-generated catch block
-					e1.printStackTrace();
-				}
-	            
-	            
-	            JSONObject regUser = new JSONObject();
-	            try {
-					regUser.put("identity", email);
-					regUser.put("salt_masterkey", salt_masterkey);
-					regUser.put("pubkey_user",pubkey_user);
-					regUser.put("privkey_user_enc", privkey_user_enc);
-				} catch (JSONException e1) {
-					// TODO Auto-generated catch block
-					e1.printStackTrace();
-				}
-	         
-	            try {
-					new Resty().json("http://web2016team7.herokuapp.com/",form(data("identity", email),
-							data("salt_masterkey", salt_masterkey.toString()),
-							data("pubkey_user",pubkey_user.toString()),
-							data("privkey_user_enc", privkey_user_enc.toString())
+					new Resty().json("http://localhost:3000/",form(data("identity", email),
+							data("salt_masterkey", salt_masterkeyString),
+							data("pubkey_user",publicKey.toString()),
+							data("privkey_user_enc", privkey_user_enc)
 							));
 				} catch (Exception e1) {
 					// TODO Auto-generated catch block
@@ -378,74 +344,93 @@ public class ChatClient implements ActionListener {
 			public void actionPerformed(ActionEvent e) {
 				String email= loginEmail.getText();
 				char[] password = loginPassword.getText().toCharArray();
+				byte[] masterkey = null;
 				
 				Resty r = new Resty();
 				JSONObject user = new JSONObject();
 				try {
-					user = r.json("http://web2016team7.herokuapp.com/" + email).object();
+					user = r.json("http://localhost:3000/" + email).object();
 				} catch (IOException e1) {
 					e1.printStackTrace();
 				} catch (JSONException e1) {
 					e1.printStackTrace();
-				}
-				
+				}				
 				String salt_masterkeyString;
-				String privkey_user_encString;
+				String privkey_user_encString = null;
 				String pubkey_userString;
 				byte[] salt_masterkey = null;
-				byte[] privkey_user_enc = null;
-				byte[] pubkey_user = null;
 				try {
 					salt_masterkeyString = user.getString("salt_masterkey");
 					privkey_user_encString = user.getString("privkey_user_enc");
-					pubkey_userString = user.getString("pubkey_user");
-				
-	                salt_masterkey = salt_masterkeyString.getBytes();
-	                privkey_user_enc = privkey_user_encString.getBytes();
-	                pubkey_user = pubkey_userString.getBytes();
-				
+					pubkey_userString = user.getString("pubkey_user");	
+					System.out.println("" + salt_masterkeyString);
+					
+					BASE64Decoder decoder = new BASE64Decoder();
+					salt_masterkey = decoder.decodeBuffer(salt_masterkeyString);
+					System.out.println("" + salt_masterkey);
+				} catch (Exception e1) {
+					e1.printStackTrace();
+				}
+				//generate masterkey
+				try {
+					masterkey = deriveKey(password.toString(), salt_masterkey, 256);
 				} catch (Exception e1) {
 					e1.printStackTrace();
 				}
 				
-				
-				SecretKey masterkey = null;
-				try {
-					SecretKeyFactory secretKeyFactory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
-					KeySpec keySpec = new PBEKeySpec(password, salt_masterkey, 1000, 256);
-					SecretKey tmp = secretKeyFactory.generateSecret(keySpec);
-					masterkey = new SecretKeySpec(tmp.getEncoded(), "AES");
-				} catch (NoSuchAlgorithmException e1) {
-					e1.printStackTrace();
-				} catch (InvalidKeySpecException e1) {
-					e1.printStackTrace();
-				}
-				
-				
-				byte[] privkey_user = null;
-		            try {
-						Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5Padding");
-						cipher.init(Cipher.UNWRAP_MODE,masterkey);
-
-						Key privkey_user_key = cipher.unwrap(privkey_user_enc, "AES", Cipher.SECRET_KEY);
-		                privkey_user = privkey_user_key.getEncoded();
-						
-					} catch (InvalidKeyException e1) {
-						// TODO Auto-generated catch block
-						e1.printStackTrace();
-					} catch (NoSuchAlgorithmException e1) {
-						// TODO Auto-generated catch block
-						e1.printStackTrace();
-					} catch (NoSuchPaddingException e1) {
-						// TODO Auto-generated catch block
-						e1.printStackTrace();
-					}
-				System.out.println(privkey_user);
-				
-				
+				String privkeyString = decrypt(privkey_user_encString, masterkey);
+			
+				System.out.println(privkeyString);
 			}
 		});
 	}
+    private static byte[] getSalt() throws NoSuchAlgorithmException
+    {
+        SecureRandom sr = SecureRandom.getInstance("SHA1PRNG");
+        byte[] salt = new byte[64];
+        sr.nextBytes(salt);
+        return salt;
+    }
+    public byte[] deriveKey(String password, byte[] salt, int keyLen) throws NoSuchAlgorithmException, InvalidKeySpecException {
+        SecretKeyFactory kf = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
+        KeySpec specs = new PBEKeySpec(password.toCharArray(), salt, 10000, keyLen);
+        SecretKey key = kf.generateSecret(specs);
+        return key.getEncoded();
+    }
+    public static String encrypt(byte[] masterkey, Key privKey)
+    {
+    	SecretKey masterkey_enc = new SecretKeySpec(masterkey, 0, masterkey.length, "AES");
+    	
+        try
+        {
+            Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5Padding");
+            cipher.init(Cipher.ENCRYPT_MODE, masterkey_enc);
+            final String encryptedString = Base64.encodeBase64String(cipher.doFinal(privKey.toString().trim().getBytes()));
+            return encryptedString;
+        }
+        catch (Exception e)
+        {
+           e.printStackTrace();
+        }
+        return null;
+    }
+    public static String decrypt(String strToDecrypt, byte[] masterkey)
+    {
+    	SecretKey masterkey_enc = new SecretKeySpec(masterkey, 0, masterkey.length, "AES");
+        try
+        {
+        	Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5Padding");
+            cipher.init(Cipher.DECRYPT_MODE, masterkey_enc);
+            final String decryptedString = new String(cipher.doFinal(Base64.decodeBase64(strToDecrypt.trim())));
+            return decryptedString;
+        }
+        catch (Exception e)
+        {
+          e.printStackTrace();
+        }
+        return null;
+    }
+
 
 	public void actionPerformed(ActionEvent evt) {
 		if (evt.getSource() == b1) {

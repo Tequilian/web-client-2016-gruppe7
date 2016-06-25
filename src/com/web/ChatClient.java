@@ -159,6 +159,11 @@ public class ChatClient implements ActionListener {
 		f1.getContentPane().add(p1, "name_login");
 		f2.getContentPane().add(p2, "name_register");
 		f3.getContentPane().add(p3, "name_chat");
+		
+		//hide Chat Button
+		b3.hide();
+		
+		
 
 /////////////////////////////////////////////////////////////////////////////////////////////
 //1		
@@ -294,7 +299,7 @@ public class ChatClient implements ActionListener {
 				byte[] salt_masterkey1 = null;
 				Key publicKey = null;
 				Key privateKey = null;
-				String privkey_user_enc = null;
+				byte[] privkey_user_enc = null;
 				byte[] masterkey = null;
 				
 				//get Salt
@@ -336,11 +341,16 @@ public class ChatClient implements ActionListener {
 				}
 				//generate privkey_user_enc
 				privkey_user_enc = encrypt(masterkey, privateKey);
+				
+				BASE64Encoder myEncoder = new BASE64Encoder();
+			      String geheimPrivKey = myEncoder.encode(privkey_user_enc);
+				
+				//write to database
 	            try {
 					new Resty().json("http://localhost:3000/",form(data("identity", email),
 							data("salt_masterkey", saltString),
 							data("pubkey_user",publicKey.toString()),
-							data("privkey_user_enc", privkey_user_enc)
+							data("privkey_user_enc", geheimPrivKey)
 							));
 				} catch (Exception e1) {
 					e1.printStackTrace();
@@ -388,9 +398,14 @@ public class ChatClient implements ActionListener {
 				} catch (Exception e1) {
 					e1.printStackTrace();
 				}
-				
-				String privkeyString = decrypt(privkey_user_encString, masterkey);
-				System.out.println(privkeyString);
+				BASE64Decoder myDecoder2 = new BASE64Decoder();
+			      byte[] crypted2 = null;
+				try {
+					crypted2 = myDecoder2.decodeBuffer(privkey_user_encString);
+				} catch (IOException e1) {
+					e1.printStackTrace();
+				}
+				String privkeyString = decrypt(crypted2, masterkey);
 			}
 		});
 	}
@@ -408,38 +423,91 @@ public class ChatClient implements ActionListener {
         SecretKey key = kf.generateSecret(specs);
         return key.getEncoded();
     }
-    public static String encrypt(byte[] masterkey, Key privKey)
+    public static byte[] encrypt(byte[] masterkey, Key privKey)
     {
-    	SecretKey masterkey_enc = new SecretKeySpec(masterkey, 0, masterkey.length, "AES");		
-        try
-        {
-            Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5Padding");
-            cipher.init(Cipher.ENCRYPT_MODE, masterkey_enc);
-            final String encryptedString = Base64.encodeBase64String(cipher.doFinal(privKey.toString().trim().getBytes()));
-            return encryptedString;
-        }
-        catch (Exception e)
-        {
-           e.printStackTrace();
-        }
-        return null;
+    	System.out.println(Arrays.toString(privKey.getEncoded()));
+    	
+    	try {
+			SecretKey masterkey_enc = new SecretKeySpec(masterkey, 0, masterkey.length, "AES");			
+			byte[] encrypted = null;
+			 Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5Padding");
+			 cipher.init(Cipher.ENCRYPT_MODE, masterkey_enc);
+			return encrypted = cipher.doFinal(privKey.getEncoded());
+		} catch (InvalidKeyException e) {
+			e.printStackTrace();
+		} catch (NoSuchAlgorithmException e) {
+			e.printStackTrace();
+		} catch (NoSuchPaddingException e) {
+			e.printStackTrace();
+		} catch (IllegalBlockSizeException e) {
+			e.printStackTrace();
+		} catch (BadPaddingException e) {
+			e.printStackTrace();
+		}
+    	
+    	return null;
+//    	SecretKey masterkey_enc = new SecretKeySpec(masterkey, 0, masterkey.length, "AES");		
+//        try
+//        {
+//            Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5Padding");
+//            cipher.init(Cipher.ENCRYPT_MODE, masterkey_enc);
+//            final String encryptedString = Base64.encodeBase64String(cipher.doFinal(privKey.toString().trim().getBytes()));
+//            return encryptedString;
+//        }
+//        catch (Exception e)
+//        {
+//           e.printStackTrace();
+//        }
+//        return null;
     }
-    public static String decrypt(String strToDecrypt, byte[] masterkey)
+    public static String decrypt(byte[] strToDecrypt, byte[] masterkey)
     {
-    	SecretKey masterkey_enc = new SecretKeySpec(masterkey, 0, masterkey.length, "AES");
     
-        try
-        {
-        	Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5Padding");
-            cipher.init(Cipher.DECRYPT_MODE, masterkey_enc);
-            final String decryptedString = new String(cipher.doFinal(Base64.decodeBase64(strToDecrypt.trim())));
-            return decryptedString;
-        }
-        catch (Exception e)
-        {
-          e.printStackTrace();
-        }
-        return null;
+    	SecretKey masterkey_enc = new SecretKeySpec(masterkey, 0, masterkey.length, "AES");
+    	
+    	try {
+			Cipher cipher2 = Cipher.getInstance("AES/ECB/PKCS5Padding");
+			cipher2.init(Cipher.DECRYPT_MODE, masterkey_enc);
+			byte[] cipherData2 = cipher2.doFinal(strToDecrypt);
+			System.out.println(Arrays.toString(cipherData2));
+			return new String(cipherData2);
+		} catch (InvalidKeyException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (NoSuchAlgorithmException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (NoSuchPaddingException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (IllegalBlockSizeException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (BadPaddingException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+    	return null;
+    	
+    	
+//    	SecretKey masterkey_enc = new SecretKeySpec(masterkey, 0, masterkey.length, "AES");
+//    
+//        try
+//        {
+//        	Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5Padding");
+//            cipher.init(Cipher.DECRYPT_MODE, masterkey_enc);
+//            final String decryptedString = new String(cipher.doFinal(Base64.decodeBase64(strToDecrypt.trim())));
+//            return decryptedString;
+//        }
+//        catch(BadPaddingException e)
+//        {
+//        	//login fehlerhaft
+//        }
+//        catch (Exception e)
+//        {
+//          e.printStackTrace();
+//        }
+//        return null;
     }
 
 

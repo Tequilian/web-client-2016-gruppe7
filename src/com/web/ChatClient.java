@@ -5,14 +5,10 @@ import java.awt.Color;
 import java.awt.event.*;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
-import java.security.InvalidKeyException;
-import java.security.Key;
-import java.security.KeyPair;
-import java.security.KeyPairGenerator;
-import java.security.NoSuchAlgorithmException;
-import java.security.SecureRandom;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.KeySpec;
+import java.security.spec.RSAPublicKeySpec;
+import java.security.spec.X509EncodedKeySpec;
 import java.util.ArrayList;
 import java.util.Arrays;
 
@@ -24,6 +20,8 @@ import javax.swing.JFrame;
 import javax.crypto.*; 
 import javax.crypto.spec.*; 
 import java.security.*;
+import java.security.interfaces.RSAPublicKey;
+
 import javax.swing.JButton;
 import javax.swing.JPanel;
 
@@ -69,6 +67,10 @@ public class ChatClient implements ActionListener {
 	private JTextField regEmail;
 	private JPasswordField regPassword;
 	private JLabel lblPassword2;
+	private JTextField chatOutput;
+	private JTextField chatInput;
+	
+	private String email = "";
 
 
 	/**
@@ -235,7 +237,7 @@ public class ChatClient implements ActionListener {
 				String statusCode = "";
 				try {
 					try {
-						json = r.json("http://web2016team7.herokuapp.com/all");
+						json = r.json("http://localhost:3000/all");
 						status = json.object();
 					} catch (ClassCastException e3) {
 						alluser = json.array();
@@ -263,15 +265,49 @@ public class ChatClient implements ActionListener {
 			}
 		});
 		getAll.setFont(new Font("Tahoma", Font.PLAIN, 16));
-		getAll.setBounds(121, 23, 97, 25);
+		getAll.setBounds(26, 52, 97, 25);
 		p3.add(getAll);
 		
 		user_list = new List();
 		user_list.setForeground(Color.BLACK);
 		user_list.setFont(new Font("Tahoma", Font.BOLD, 16));
 		user_list.setBackground(Color.ORANGE);
-		user_list.setBounds(26, 54, 192, 347);
+		user_list.setBounds(26, 85, 97, 347);
 		p3.add(user_list);
+		
+		chatOutput = new JTextField();
+		chatOutput.setBounds(260, 54, 514, 316);
+		p3.add(chatOutput);
+		chatOutput.setColumns(10);
+		
+		chatInput = new JTextField();
+		chatInput.setBounds(260, 381, 368, 20);
+		p3.add(chatInput);
+		chatInput.setColumns(10);
+		
+		JButton sendBTN = new JButton("Send");
+		sendBTN.setBounds(638, 381, 136, 20);
+		p3.add(sendBTN);
+		
+		JButton refreshBTN = new JButton("Refresh");
+		refreshBTN.setBounds(685, 25, 89, 23);
+		p3.add(refreshBTN);
+		
+		List MSGList = new List();
+		MSGList.setForeground(Color.BLACK);
+		MSGList.setFont(new Font("Tahoma", Font.BOLD, 16));
+		MSGList.setBackground(Color.GREEN);
+		MSGList.setBounds(132, 85, 104, 347);
+		p3.add(MSGList);
+		
+		JLabel lblMsglist = new JLabel("MSGList");
+		lblMsglist.setFont(new Font("Tahoma", Font.PLAIN, 18));
+		lblMsglist.setBounds(139, 25, 112, 16);
+		p3.add(lblMsglist);
+		
+		JButton btnNewButton = new JButton("RefreshMSGList");
+		btnNewButton.setBounds(133, 52, 103, 26);
+		p3.add(btnNewButton);
 
 		f1.setVisible(true);
 		f2.setVisible(false);
@@ -304,7 +340,7 @@ public class ChatClient implements ActionListener {
 				
 				//get Salt
 				try {
-					salt_masterkey1 = getSalt();
+					salt_masterkey1 = getSalt(64);
 				} catch (NoSuchAlgorithmException e1) {
 					e1.printStackTrace();
 				}
@@ -345,11 +381,17 @@ public class ChatClient implements ActionListener {
 				BASE64Encoder myEncoder = new BASE64Encoder();
 			      String geheimPrivKey = myEncoder.encode(privkey_user_enc);
 				
+			      byte[] pub = publicKey.getEncoded();
+			      String pubString = null;
+					pubString = myEncoder.encode(pub);
+			      System.out.println(pubString);
+			      System.out.println(Arrays.toString(pub));
+			      
 				//write to database
 	            try {
 					new Resty().json("http://localhost:3000/",form(data("identity", email),
 							data("salt_masterkey", saltString),
-							data("pubkey_user",publicKey.toString()),
+							data("pubkey_user",pubString),
 							data("privkey_user_enc", geheimPrivKey)
 							));
 				} catch (Exception e1) {
@@ -360,7 +402,7 @@ public class ChatClient implements ActionListener {
 		//----------------------ON CLICK LISTENER LOGIN------------------------------------
 		btnLogin.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
-				String email= loginEmail.getText();
+				email= loginEmail.getText();
 				String password = loginPassword.getText();
 				byte[] masterkey = null;
 				
@@ -408,11 +450,205 @@ public class ChatClient implements ActionListener {
 				String privkeyString = decrypt(crypted2, masterkey);
 			}
 		});
+		//----------------Click Listener SENDEN----------------------
+		sendBTN.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				String receiver = "";
+				String pubkey_recipient = "";
+				String inputText = "";
+				byte[] key_receipient = null;
+				byte[] iv = null;
+				String ivString = "";
+				String cipherString = null;
+				IvParameterSpec ivspec = null;
+				
+				
+				//get recivier identity
+				receiver = user_list.getSelectedItem();
+				
+				//get Pubkey from Reciver
+				Resty r = new Resty();
+				JSONObject pubkeyRec = new JSONObject();
+				try {
+					pubkeyRec = r.json("http://localhost:3000/" + receiver + "/pubkey").object();
+				} catch (IOException e1) {
+					e1.printStackTrace();
+				} catch (JSONException e1) {
+					e1.printStackTrace();
+				}				
+				try {
+					pubkey_recipient = pubkeyRec.getString("pubkey_user");
+				} catch (JSONException e1) {
+					e1.printStackTrace();
+				}
+				//get Nachricht von GUI
+				inputText= chatInput.getText();
+				//get key_receipient randomly
+				try {
+					key_receipient = getSalt(16);
+				} catch (NoSuchAlgorithmException e1) {
+					e1.printStackTrace();
+				}
+				//get iv randomly
+				try {
+					iv = getSalt(16);
+					ivString = new String(iv,"UTF-8");
+					ivspec = new IvParameterSpec(iv);
+				} catch (NoSuchAlgorithmException e1) {
+					e1.printStackTrace();
+				} catch (UnsupportedEncodingException e1) {
+					e1.printStackTrace();
+				}
+				//verschlüsselung der Nachricht
+				byte[] nachricht = encryptMSG(key_receipient, inputText, ivspec);
+				String nachrichtString = null;
+				try {
+					nachrichtString = new String(nachricht,"UTF-8");
+				} catch (UnsupportedEncodingException e2) {
+					e2.printStackTrace();
+				}
+				
+				
+				//get key_receipient_enc mit RSA und pubkey
+				
+				BASE64Decoder myDecoder2 = new BASE64Decoder();
+				byte[] pubkey_recipientByte = null;
+					try {
+						pubkey_recipientByte = myDecoder2.decodeBuffer(pubkey_recipient);
+					} catch (UnsupportedEncodingException e2) {
+						e2.printStackTrace();
+					} catch (IOException e1) {
+						e1.printStackTrace();
+					}
+		    		System.out.println(pubkey_recipient);
+		    		System.out.println(Arrays.toString(pubkey_recipientByte));
+				
+				byte[] key_recipient_enc = encrypt_rec_priv(pubkey_recipientByte,key_receipient);
+				String key_recipient_encString = "";
+				try {
+					key_recipient_encString = new String(key_recipient_enc,"UTF-8");
+				} catch (UnsupportedEncodingException e1) {
+					e1.printStackTrace();
+				}
+				//get sig_recipient
+				byte[] sig_recipient = null;
+				String digSignature = email + nachrichtString + ivString + key_recipient_encString;
+				try {
+					MessageDigest md = MessageDigest.getInstance("SHA-256");
+					md.update(digSignature.getBytes("UTF-8"));
+					sig_recipient = md.digest();
+				} catch (NoSuchAlgorithmException e1) {
+					e1.printStackTrace();
+				} catch (UnsupportedEncodingException e1) {
+					e1.printStackTrace();
+				}
+				//get timestamp
+				long unixTime = System.currentTimeMillis() / 1000L;
+				String strTime = Long.toString(unixTime);
+				
+				//get sig_service
+				byte[] sig_service = null;
+				String digSigService = receiver + email + nachrichtString + ivString + key_recipient_encString + strTime;
+				try {
+					MessageDigest md = MessageDigest.getInstance("SHA-256");
+					md.update(digSigService.getBytes("UTF-8"));
+					sig_service = md.digest();
+				} catch (NoSuchAlgorithmException e1) {
+					e1.printStackTrace();
+				} catch (UnsupportedEncodingException e1) {
+					e1.printStackTrace();
+				}
+				
+				//snede zum Server
+				
+				BASE64Encoder myEncoder = new BASE64Encoder();
+			      String sendNachricht = myEncoder.encode(nachricht);
+			      String sendIV = myEncoder.encode(iv);
+			      String sendKey_recipient_enc = myEncoder.encode(key_recipient_enc);
+			      String sendSig_recipient = myEncoder.encode(sig_recipient);
+			      String sendSig_service = myEncoder.encode(sig_service);
+				
+				 try {
+						new Resty().json("http://localhost:3000/"+ receiver +"/msg",form(
+								data("sender", email),
+								data("cipher", sendNachricht),
+								data("iv",sendIV),
+								data("key_recipient_enc", sendKey_recipient_enc),
+								data("timestamp", strTime),
+								data("sig_recipient", sendKey_recipient_enc),
+								data("sig_service", sendSig_service)
+								));
+					} catch (Exception e1) {
+						e1.printStackTrace();
+					}
+				
+			}
+		});
+		//-------Click Listener RefreshNachrichten--------------------
+		refreshBTN.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				String sender = "";
+				String receiver = "";
+				
+			}
+		});
+		//-----Click getAllMSG---------------------
+		btnNewButton.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				String msgid = "";
+				
+				
+				JSONResource json = null;
+				JSONObject status = null;
+				JSONArray allmsg = null;
+				Resty r = new Resty();
+				String statusCode = "";
+				try {
+					try {
+						json = r.json("http://localhost:3000/"+ email +"/showallmsg/");
+						status = json.object();
+					} catch (ClassCastException e3) {
+						allmsg = json.array();
+					}
+					if (status != null) {
+						statusCode = status.getString("status_code");
+						if (statusCode.equals("461")) {
+							MSGList.add("Keine Massage gefunden");
+						}
+					} else {
+						ArrayList<Message> msglist = new ArrayList<Message>();
+						for(int i = 0; i < allmsg.length();i++){
+							Message msg = new Message();
+							msg.setId(allmsg.getJSONObject(i).getString("message_id"));
+							msg.setName(allmsg.getJSONObject(i).getString("identity"));
+							msglist.add(msg);
+							MSGList.add(msg.getId()+". "+msg.getName());
+						}
+						
+						
+//						ArrayList<User> userlist = new ArrayList<User>();
+//						for (int i = 0; i < allmsg.length(); i++) {
+//							User user = new User();
+//							user.setIdentity(allmsg.getJSONObject(i).getString("identity"));
+//							user.setPubkey_user(allmsg.getJSONObject(i).getString("pubkey_user"));
+//							userlist.add(user);
+//							user_list.add(user.getIdentity());
+//						}
+
+					}
+				} catch (Exception e5) {
+					e5.printStackTrace();
+				}
+				
+				
+				
+			}
+		});
 	}
-    private static byte[] getSalt() throws NoSuchAlgorithmException
+	    private byte[] getSalt(int i) throws NoSuchAlgorithmException
     {
         SecureRandom sr = SecureRandom.getInstance("SHA1PRNG");
-        byte[] salt = new byte[64];
+        byte[] salt = new byte[i];
         sr.nextBytes(salt);
         return salt;
     }
@@ -423,10 +659,9 @@ public class ChatClient implements ActionListener {
         SecretKey key = kf.generateSecret(specs);
         return key.getEncoded();
     }
-    public static byte[] encrypt(byte[] masterkey, Key privKey)
+    public byte[] encrypt(byte[] masterkey, Key privKey)
     {
-    	System.out.println(Arrays.toString(privKey.getEncoded()));
-    	
+    	//System.out.println(Arrays.toString(privKey.getEncoded()));
     	try {
 			SecretKey masterkey_enc = new SecretKeySpec(masterkey, 0, masterkey.length, "AES");			
 			byte[] encrypted = null;
@@ -444,32 +679,73 @@ public class ChatClient implements ActionListener {
 		} catch (BadPaddingException e) {
 			e.printStackTrace();
 		}
-    	
     	return null;
-//    	SecretKey masterkey_enc = new SecretKeySpec(masterkey, 0, masterkey.length, "AES");		
-//        try
-//        {
-//            Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5Padding");
-//            cipher.init(Cipher.ENCRYPT_MODE, masterkey_enc);
-//            final String encryptedString = Base64.encodeBase64String(cipher.doFinal(privKey.toString().trim().getBytes()));
-//            return encryptedString;
-//        }
-//        catch (Exception e)
-//        {
-//           e.printStackTrace();
-//        }
-//        return null;
     }
-    public static String decrypt(byte[] strToDecrypt, byte[] masterkey)
+    public byte[] encrypt_rec_priv(byte[] pubKeyReceipient, byte[] privKey)
     {
-    
-    	SecretKey masterkey_enc = new SecretKeySpec(masterkey, 0, masterkey.length, "AES");
+    	//System.out.println(Arrays.toString(privKey.getEncoded()));
+    	try {
+    		PublicKey masterKey = 
+    			    KeyFactory.getInstance("RSA").generatePublic(new X509EncodedKeySpec(pubKeyReceipient));
+			//SecretKey masterkey_enc = new SecretKeySpec(pubKeyReceipient, 0, pubKeyReceipient.length, "AES");
+			
+			byte[] encrypted = null;
+			 Cipher cipher = Cipher.getInstance("RSA");
+			 cipher.init(Cipher.ENCRYPT_MODE, masterKey);
+			return encrypted = cipher.doFinal(privKey);
+		} catch (InvalidKeyException e) {
+			e.printStackTrace();
+		} catch (NoSuchAlgorithmException e) {
+			e.printStackTrace();
+		} catch (NoSuchPaddingException e) {
+			e.printStackTrace();
+		} catch (IllegalBlockSizeException e) {
+			e.printStackTrace();
+		} catch (BadPaddingException e) {
+			e.printStackTrace();
+		} catch (InvalidKeySpecException e) {
+			e.printStackTrace();
+		}
+    	return null;
+    }
+    public byte[] encryptMSG(byte[] key_recipient, String Nachricht,IvParameterSpec iv )
+    {
+    	byte[] clearText = null;
     	
+    	SecretKey key_recipient_enc = new SecretKeySpec(key_recipient, 0, key_recipient.length, "AES");	
+           try {
+			Cipher encryptCipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
+			   encryptCipher.init(Cipher.ENCRYPT_MODE, key_recipient_enc, iv);
+			   clearText = Nachricht.getBytes("UTF-8");
+			   return  encryptCipher.doFinal(clearText);
+		} catch (InvalidKeyException e) {
+			e.printStackTrace();
+		} catch (NoSuchAlgorithmException e) {
+			e.printStackTrace();
+		} catch (NoSuchPaddingException e) {
+			e.printStackTrace();
+		} catch (InvalidAlgorithmParameterException e) {
+			e.printStackTrace();
+		} catch (UnsupportedEncodingException e) {
+			e.printStackTrace();
+		} catch (IllegalBlockSizeException e) {
+			e.printStackTrace();
+		} catch (BadPaddingException e) {
+			e.printStackTrace();
+		}
+           
+           return null;
+
+    }
+    public String decrypt(byte[] strToDecrypt, byte[] masterkey)
+    {
+    	SecretKey masterkey_enc = new SecretKeySpec(masterkey, 0, masterkey.length, "AES");
     	try {
 			Cipher cipher2 = Cipher.getInstance("AES/ECB/PKCS5Padding");
 			cipher2.init(Cipher.DECRYPT_MODE, masterkey_enc);
 			byte[] cipherData2 = cipher2.doFinal(strToDecrypt);
-			System.out.println(Arrays.toString(cipherData2));
+			//System.out.println(Arrays.toString(cipherData2));
+			b3.setVisible(true);
 			return new String(cipherData2);
 		} catch (InvalidKeyException e) {
 			// TODO Auto-generated catch block
@@ -484,30 +760,10 @@ public class ChatClient implements ActionListener {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		} catch (BadPaddingException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+			//login failed
+			b3.setVisible(true);
 		}
     	return null;
-    	
-    	
-//    	SecretKey masterkey_enc = new SecretKeySpec(masterkey, 0, masterkey.length, "AES");
-//    
-//        try
-//        {
-//        	Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5Padding");
-//            cipher.init(Cipher.DECRYPT_MODE, masterkey_enc);
-//            final String decryptedString = new String(cipher.doFinal(Base64.decodeBase64(strToDecrypt.trim())));
-//            return decryptedString;
-//        }
-//        catch(BadPaddingException e)
-//        {
-//        	//login fehlerhaft
-//        }
-//        catch (Exception e)
-//        {
-//          e.printStackTrace();
-//        }
-//        return null;
     }
 
 

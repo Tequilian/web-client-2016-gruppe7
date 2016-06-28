@@ -687,13 +687,29 @@ public class ChatClient implements ActionListener {
 				
 			
 				String identity = "";
+				String cipherString = "";
+				String sig_recipientString = "";
+				String ivString = "";
+				String key_recipient_encString = "";
 				try {
 					//pubkey_recipient = pubkeyRec.getString("pubkey_user");
 					identity = msgRec.getString("identity");
+					cipherString = msgRec.getString("cipher");
+					sig_recipientString = msgRec.getString("sig_recipient");
+					ivString = msgRec.getString("iv");
+					key_recipient_encString = msgRec.getString("key_recipient_enc");
 				} catch (JSONException e1) {
 					e1.printStackTrace();
 				}
-				System.out.println(identity);
+				byte[] sig_recipientByte = null;
+				try {
+					sig_recipientByte = myDecoder2.decodeBuffer(sig_recipientString);
+					
+					
+					
+				} catch (IOException e1) {
+					e1.printStackTrace();
+				}
 				
 			}
 		});

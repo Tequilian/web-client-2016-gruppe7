@@ -545,7 +545,7 @@ public class ChatClient implements ActionListener {
 				byte[] sig_recipient = null;
 				String digSignature = email + nachrichtString + ivString + key_recipient_encString;
 				
-				Signature sig;
+				Signature sig = null;
 				try {
 					sig = Signature.getInstance("SHA256withRSA");
 					sig.initSign(privateKey);
@@ -559,7 +559,7 @@ public class ChatClient implements ActionListener {
 					e2.printStackTrace();
 				}
 				String sig_recipientString = myEncoder.encode(sig_recipient);
-				
+					
 				//get timestamp
 				long unixTime = System.currentTimeMillis() / 1000L;
 				String strTime = Long.toString(unixTime);
@@ -638,8 +638,9 @@ public class ChatClient implements ActionListener {
 				long unixTime = System.currentTimeMillis() / 1000L;
 				String strTime = Long.toString(unixTime);
 				
+				
+				
 				//get PrivateKey
-				//get PrivKey
 				PrivateKey privateKey = null;
 				try {
 					EncodedKeySpec privateKeySpec = new PKCS8EncodedKeySpec(privkeyByte);
@@ -672,9 +673,8 @@ public class ChatClient implements ActionListener {
 				}
 				sig_messageString = myEncoder.encode(sig_message);
 				
-				Resty r = new Resty();
 				JSONObject msgRec = new JSONObject();
-				
+				Resty r = new Resty();
 				 try {
 						msgRec = r.json("http://localhost:3000/"+ email +"/showmsg",form(
 								data("sig_message",sig_messageString),
@@ -686,14 +686,13 @@ public class ChatClient implements ActionListener {
 					}
 				
 			
-				String identity = "";
 				String cipherString = "";
 				String sig_recipientString = "";
 				String ivString = "";
 				String key_recipient_encString = "";
 				try {
 					//pubkey_recipient = pubkeyRec.getString("pubkey_user");
-					identity = msgRec.getString("identity");
+					sender = msgRec.getString("identity");
 					cipherString = msgRec.getString("cipher");
 					sig_recipientString = msgRec.getString("sig_recipient");
 					ivString = msgRec.getString("iv");
@@ -701,9 +700,52 @@ public class ChatClient implements ActionListener {
 				} catch (JSONException e1) {
 					e1.printStackTrace();
 				}
+				
+				
+				//get Pubkey from Identiy
+
+				JSONObject pubkeySen = new JSONObject();
+				String pubkey_senderString = "";
+				byte[] pubkey_recipientByte = null;
+				try {
+					pubkeySen = r.json("http://localhost:3000/" + sender + "/pubkey").object();
+				} catch (IOException e1) {
+					e1.printStackTrace();
+				} catch (JSONException e1) {
+					e1.printStackTrace();
+				}				
+				try {
+					pubkey_senderString = pubkeySen.getString("pubkey_user");
+				} catch (JSONException e1) {
+					e1.printStackTrace();
+				}
+				PublicKey pubKey = null;
+				try {
+					pubkey_recipientByte = myDecoder2.decodeBuffer(pubkey_senderString);
+					pubKey = null;
+					pubKey = KeyFactory.getInstance("RSA").generatePublic(new X509EncodedKeySpec(pubkey_recipientByte));
+				} catch (InvalidKeySpecException | NoSuchAlgorithmException | IOException e4) {
+					e4.printStackTrace();
+				}
+				
+				
 				byte[] sig_recipientByte = null;
 				try {
 					sig_recipientByte = myDecoder2.decodeBuffer(sig_recipientString);
+					
+					
+					
+					String digSignature = sender + cipherString + ivString + key_recipient_encString;
+
+					try {
+						Signature sig2 = Signature.getInstance("SHA256withRSA");
+						sig2.initVerify(pubKey);
+						sig2.update(digSignature.getBytes());
+						System.out.println(sig2.verify(sig_recipientByte));
+					} catch (InvalidKeyException | NoSuchAlgorithmException | SignatureException e1) {
+						e1.printStackTrace();
+					}
+					
 					
 					
 					

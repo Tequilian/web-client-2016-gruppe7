@@ -5,8 +5,11 @@ import java.awt.Color;
 import java.awt.event.*;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
+import java.nio.charset.Charset;
+import java.security.spec.EncodedKeySpec;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.KeySpec;
+import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.RSAPublicKeySpec;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.ArrayList;
@@ -39,6 +42,7 @@ import java.awt.List;
 import javax.swing.JTextField;
 import javax.swing.JPasswordField;
 import javax.swing.UIManager;
+import javax.xml.bind.DatatypeConverter;
 
 
 public class ChatClient implements ActionListener {
@@ -71,6 +75,8 @@ public class ChatClient implements ActionListener {
 	private JTextField chatInput;
 	
 	private String email = "";
+	byte[] privkeyByte = null;
+	byte[] test = null;
 
 
 	/**
@@ -371,21 +377,21 @@ public class ChatClient implements ActionListener {
 					KeyPair kp = kpg.genKeyPair();
 					publicKey = kp.getPublic();
 					privateKey = kp.getPrivate();
+					//test = privateKey.getEncoded();
 					//System.out.println(privateKey.getEncoded().toString());
 				} catch (Exception e1) {
 					e1.printStackTrace();
 				}
 				//generate privkey_user_enc
 				privkey_user_enc = encrypt(masterkey, privateKey);
+				System.out.println("1:" +Arrays.toString(publicKey.getEncoded()));
+				//System.out.println("RegisterByte " +Arrays.toString(privkey_user_enc));
 				
 				BASE64Encoder myEncoder = new BASE64Encoder();
 			      String geheimPrivKey = myEncoder.encode(privkey_user_enc);
-				
 			      byte[] pub = publicKey.getEncoded();
 			      String pubString = null;
 					pubString = myEncoder.encode(pub);
-			      System.out.println(pubString);
-			      System.out.println(Arrays.toString(pub));
 			      
 				//write to database
 	            try {
@@ -444,15 +450,20 @@ public class ChatClient implements ActionListener {
 			      byte[] crypted2 = null;
 				try {
 					crypted2 = myDecoder2.decodeBuffer(privkey_user_encString);
+					
 				} catch (IOException e1) {
 					e1.printStackTrace();
 				}
-				String privkeyString = decrypt(crypted2, masterkey);
+				privkeyByte = decrypt(crypted2, masterkey);
+				//System.out.println("2:" +Arrays.toString(privkeyByte));
+				//System.out.println("2:" +Arrays.toString(test));
 			}
 		});
 		//----------------Click Listener SENDEN----------------------
 		sendBTN.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
+				BASE64Encoder myEncoder = new BASE64Encoder();
+				BASE64Decoder myDecoder2 = new BASE64Decoder();
 				String receiver = "";
 				String pubkey_recipient = "";
 				String inputText = "";
@@ -492,26 +503,17 @@ public class ChatClient implements ActionListener {
 				//get iv randomly
 				try {
 					iv = getSalt(16);
-					ivString = new String(iv,"UTF-8");
+					ivString = myEncoder.encode(iv);
 					ivspec = new IvParameterSpec(iv);
 				} catch (NoSuchAlgorithmException e1) {
-					e1.printStackTrace();
-				} catch (UnsupportedEncodingException e1) {
 					e1.printStackTrace();
 				}
 				//verschlüsselung der Nachricht
 				byte[] nachricht = encryptMSG(key_receipient, inputText, ivspec);
-				String nachrichtString = null;
-				try {
-					nachrichtString = new String(nachricht,"UTF-8");
-				} catch (UnsupportedEncodingException e2) {
-					e2.printStackTrace();
-				}
-				
-				
+				String nachrichtString = "";
+				nachrichtString = myEncoder.encode(nachricht);
+							
 				//get key_receipient_enc mit RSA und pubkey
-				
-				BASE64Decoder myDecoder2 = new BASE64Decoder();
 				byte[] pubkey_recipientByte = null;
 					try {
 						pubkey_recipientByte = myDecoder2.decodeBuffer(pubkey_recipient);
@@ -520,63 +522,102 @@ public class ChatClient implements ActionListener {
 					} catch (IOException e1) {
 						e1.printStackTrace();
 					}
-		    		System.out.println(pubkey_recipient);
-		    		System.out.println(Arrays.toString(pubkey_recipientByte));
+		    		//System.out.println(pubkey_recipient);
+		    		System.out.println("2: "+Arrays.toString(pubkey_recipientByte));
 				
 				byte[] key_recipient_enc = encrypt_rec_priv(pubkey_recipientByte,key_receipient);
 				String key_recipient_encString = "";
+				key_recipient_encString = myEncoder.encode(key_recipient_enc);
+				
+				//get PrivKey
+				PrivateKey privateKey = null;
 				try {
-					key_recipient_encString = new String(key_recipient_enc,"UTF-8");
-				} catch (UnsupportedEncodingException e1) {
+					EncodedKeySpec privateKeySpec = new PKCS8EncodedKeySpec(privkeyByte);
+					KeyFactory generator = KeyFactory.getInstance("RSA");
+					privateKey = generator.generatePrivate(privateKeySpec);
+				} catch (NoSuchAlgorithmException e3) {
+					e3.printStackTrace();
+				} catch (InvalidKeySpecException e1) {
 					e1.printStackTrace();
 				}
+				
 				//get sig_recipient
 				byte[] sig_recipient = null;
 				String digSignature = email + nachrichtString + ivString + key_recipient_encString;
+				
+				Signature sig;
 				try {
-					MessageDigest md = MessageDigest.getInstance("SHA-256");
-					md.update(digSignature.getBytes("UTF-8"));
-					sig_recipient = md.digest();
-				} catch (NoSuchAlgorithmException e1) {
-					e1.printStackTrace();
-				} catch (UnsupportedEncodingException e1) {
-					e1.printStackTrace();
+					sig = Signature.getInstance("SHA256withRSA");
+					sig.initSign(privateKey);
+					sig.update(digSignature.getBytes());			
+					sig_recipient = sig.sign();
+				} catch (InvalidKeyException e2) {
+					e2.printStackTrace();
+				} catch (NoSuchAlgorithmException e2) {
+					e2.printStackTrace();
+				} catch (SignatureException e2) {
+					e2.printStackTrace();
 				}
+				String sig_recipientString = myEncoder.encode(sig_recipient);
+				
 				//get timestamp
 				long unixTime = System.currentTimeMillis() / 1000L;
 				String strTime = Long.toString(unixTime);
 				
-				//get sig_service
+				//get sig_service			
+				System.out.println("3: " +Arrays.toString(privkeyByte));
+				
 				byte[] sig_service = null;
 				String digSigService = receiver + email + nachrichtString + ivString + key_recipient_encString + strTime;
+				String sig_serviceString = "";
 				try {
-					MessageDigest md = MessageDigest.getInstance("SHA-256");
-					md.update(digSigService.getBytes("UTF-8"));
-					sig_service = md.digest();
+					byte[] data = digSigService.getBytes();
+						 
+					PublicKey pubKey = null;
+					pubKey = KeyFactory.getInstance("RSA").generatePublic(new X509EncodedKeySpec(pubkey_recipientByte));
+					
+					Signature sig1 = Signature.getInstance("SHA256withRSA");
+					sig1.initSign(privateKey);
+					sig1.update(data);			
+					sig_service = sig1.sign();
+					sig_serviceString = myEncoder.encode(sig_service);
+					
+					//überprüfen pb pubkey geht
+					//System.out.println("Singature:" + new BASE64Encoder().encode(sig_service));
+
+				    sig1.initVerify(pubKey);
+				    sig1.update(data);
+
+				    System.out.println(sig1.verify(sig_service));
+					
 				} catch (NoSuchAlgorithmException e1) {
 					e1.printStackTrace();
-				} catch (UnsupportedEncodingException e1) {
+				} catch (SignatureException e1) {
+					e1.printStackTrace();
+				} catch (InvalidKeyException e1) {
+					e1.printStackTrace();
+				} catch (InvalidKeySpecException e1) {
 					e1.printStackTrace();
 				}
 				
 				//snede zum Server
 				
-				BASE64Encoder myEncoder = new BASE64Encoder();
-			      String sendNachricht = myEncoder.encode(nachricht);
-			      String sendIV = myEncoder.encode(iv);
-			      String sendKey_recipient_enc = myEncoder.encode(key_recipient_enc);
-			      String sendSig_recipient = myEncoder.encode(sig_recipient);
-			      String sendSig_service = myEncoder.encode(sig_service);
+				
+//			      String sendNachricht = myEncoder.encode(nachricht);
+//			      String sendIV = myEncoder.encode(iv);
+//			      String sendKey_recipient_enc = myEncoder.encode(key_recipient_enc);
+//			      String sendSig_recipient = myEncoder.encode(sig_recipient);
+//			      String sendSig_service = myEncoder.encode(sig_service);
 				
 				 try {
 						new Resty().json("http://localhost:3000/"+ receiver +"/msg",form(
 								data("sender", email),
-								data("cipher", sendNachricht),
-								data("iv",sendIV),
-								data("key_recipient_enc", sendKey_recipient_enc),
+								data("cipher", nachrichtString),
+								data("iv",ivString),
+								data("key_recipient_enc", key_recipient_encString),
 								data("timestamp", strTime),
-								data("sig_recipient", sendKey_recipient_enc),
-								data("sig_service", sendSig_service)
+								data("sig_recipient", sig_recipientString),
+								data("sig_service", sig_serviceString)
 								));
 					} catch (Exception e1) {
 						e1.printStackTrace();
@@ -625,15 +666,6 @@ public class ChatClient implements ActionListener {
 							MSGList.add(msg.getId()+". "+msg.getName());
 						}
 						
-						
-//						ArrayList<User> userlist = new ArrayList<User>();
-//						for (int i = 0; i < allmsg.length(); i++) {
-//							User user = new User();
-//							user.setIdentity(allmsg.getJSONObject(i).getString("identity"));
-//							user.setPubkey_user(allmsg.getJSONObject(i).getString("pubkey_user"));
-//							userlist.add(user);
-//							user_list.add(user.getIdentity());
-//						}
 
 					}
 				} catch (Exception e5) {
@@ -661,7 +693,7 @@ public class ChatClient implements ActionListener {
     }
     public byte[] encrypt(byte[] masterkey, Key privKey)
     {
-    	//System.out.println(Arrays.toString(privKey.getEncoded()));
+    	//System.out.println("ENCMaster: " + Arrays.toString(masterkey));
     	try {
 			SecretKey masterkey_enc = new SecretKeySpec(masterkey, 0, masterkey.length, "AES");			
 			byte[] encrypted = null;
@@ -737,16 +769,18 @@ public class ChatClient implements ActionListener {
            return null;
 
     }
-    public String decrypt(byte[] strToDecrypt, byte[] masterkey)
+    public byte[] decrypt(byte[] strToDecrypt, byte[] masterkey)
     {
+    	//System.out.println("DECMaster: " + Arrays.toString(masterkey));
     	SecretKey masterkey_enc = new SecretKeySpec(masterkey, 0, masterkey.length, "AES");
     	try {
 			Cipher cipher2 = Cipher.getInstance("AES/ECB/PKCS5Padding");
 			cipher2.init(Cipher.DECRYPT_MODE, masterkey_enc);
-			byte[] cipherData2 = cipher2.doFinal(strToDecrypt);
-			//System.out.println(Arrays.toString(cipherData2));
 			b3.setVisible(true);
-			return new String(cipherData2);
+			return cipher2.doFinal(strToDecrypt);
+			//System.out.println("DECByte "+Arrays.toString(cipherData2));
+			
+			//return new String(cipherData2);
 		} catch (InvalidKeyException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();

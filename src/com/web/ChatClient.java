@@ -585,10 +585,10 @@ public class ChatClient implements ActionListener {
 					//überprüfen pb pubkey geht
 					//System.out.println("Singature:" + new BASE64Encoder().encode(sig_service));
 
-				    sig1.initVerify(pubKey);
-				    sig1.update(data);
+				    //sig1.initVerify(pubKey);
+				    //sig1.update(data);
 
-				    System.out.println(sig1.verify(sig_service));
+				    //System.out.println(sig1.verify(sig_service));
 					
 				} catch (NoSuchAlgorithmException e1) {
 					e1.printStackTrace();
@@ -601,13 +601,6 @@ public class ChatClient implements ActionListener {
 				}
 				
 				//snede zum Server
-				
-				
-//			      String sendNachricht = myEncoder.encode(nachricht);
-//			      String sendIV = myEncoder.encode(iv);
-//			      String sendKey_recipient_enc = myEncoder.encode(key_recipient_enc);
-//			      String sendSig_recipient = myEncoder.encode(sig_recipient);
-//			      String sendSig_service = myEncoder.encode(sig_service);
 				
 				 try {
 						new Resty().json("http://localhost:3000/"+ receiver +"/msg",form(
@@ -630,6 +623,77 @@ public class ChatClient implements ActionListener {
 			public void actionPerformed(ActionEvent e) {
 				String sender = "";
 				String receiver = "";
+				String msgid ="";
+				BASE64Encoder myEncoder = new BASE64Encoder();
+				BASE64Decoder myDecoder2 = new BASE64Decoder();
+				
+				//get Nachrichten ID
+				int index = MSGList.getSelectedItem().indexOf(".");
+				msgid = MSGList.getSelectedItem().substring(0, index);
+				
+				System.out.println(msgid);
+				
+				
+				//get timestamp
+				long unixTime = System.currentTimeMillis() / 1000L;
+				String strTime = Long.toString(unixTime);
+				
+				//get PrivateKey
+				//get PrivKey
+				PrivateKey privateKey = null;
+				try {
+					EncodedKeySpec privateKeySpec = new PKCS8EncodedKeySpec(privkeyByte);
+					KeyFactory generator = KeyFactory.getInstance("RSA");
+					privateKey = generator.generatePrivate(privateKeySpec);
+				} catch (NoSuchAlgorithmException e3) {
+					e3.printStackTrace();
+				} catch (InvalidKeySpecException e1) {
+					e1.printStackTrace();
+				}
+				
+				
+				//get sig_message über identity und timestamp
+				String sig_messageDataString = email + strTime;
+				String sig_messageString = "";
+				byte[] data  = sig_messageDataString.getBytes(); 
+				byte[] sig_message = null;
+				
+				try {
+					Signature sig1 = Signature.getInstance("SHA256withRSA");
+					sig1.initSign(privateKey);
+					sig1.update(data);			
+					sig_message = sig1.sign();
+				} catch (InvalidKeyException e2) {
+					e2.printStackTrace();
+				} catch (NoSuchAlgorithmException e2) {
+					e2.printStackTrace();
+				} catch (SignatureException e2) {
+					e2.printStackTrace();
+				}
+				sig_messageString = myEncoder.encode(sig_message);
+				
+				Resty r = new Resty();
+				JSONObject msgRec = new JSONObject();
+				
+				 try {
+						msgRec = r.json("http://localhost:3000/"+ email +"/showmsg",form(
+								data("sig_message",sig_messageString),
+								data("message_id", msgid),
+								data("timestamp", strTime)
+								)).object();
+					} catch (Exception e1) {
+						e1.printStackTrace();
+					}
+				
+			
+				String identity = "";
+				try {
+					//pubkey_recipient = pubkeyRec.getString("pubkey_user");
+					identity = msgRec.getString("identity");
+				} catch (JSONException e1) {
+					e1.printStackTrace();
+				}
+				System.out.println(identity);
 				
 			}
 		});
@@ -638,7 +702,7 @@ public class ChatClient implements ActionListener {
 			public void actionPerformed(ActionEvent e) {
 				String msgid = "";
 				
-				
+				MSGList.clear();
 				JSONResource json = null;
 				JSONObject status = null;
 				JSONArray allmsg = null;
@@ -654,7 +718,7 @@ public class ChatClient implements ActionListener {
 					if (status != null) {
 						statusCode = status.getString("status_code");
 						if (statusCode.equals("461")) {
-							MSGList.add("Keine Massage gefunden");
+							MSGList.add("Keine Message gefunden");
 						}
 					} else {
 						ArrayList<Message> msglist = new ArrayList<Message>();
@@ -663,7 +727,7 @@ public class ChatClient implements ActionListener {
 							msg.setId(allmsg.getJSONObject(i).getString("message_id"));
 							msg.setName(allmsg.getJSONObject(i).getString("identity"));
 							msglist.add(msg);
-							MSGList.add(msg.getId()+". "+msg.getName());
+							MSGList.add(msg.getId()+". Von "+msg.getName());
 						}
 						
 

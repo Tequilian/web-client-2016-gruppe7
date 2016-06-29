@@ -39,10 +39,13 @@ import java.awt.CardLayout;
 import javax.swing.JLabel;
 import java.awt.Font;
 import java.awt.List;
+import java.awt.SecondaryLoop;
+
 import javax.swing.JTextField;
 import javax.swing.JPasswordField;
 import javax.swing.UIManager;
 import javax.xml.bind.DatatypeConverter;
+import javax.swing.JTextArea;
 
 public class ChatClient implements ActionListener {
 
@@ -70,8 +73,11 @@ public class ChatClient implements ActionListener {
 	private JTextField regEmail;
 	private JPasswordField regPassword;
 	private JLabel lblPassword2;
-	private JTextField chatOutput;
 	private JTextField chatInput;
+
+	private ChatLogik chatLogik;
+	private List MSGList;
+	JTextArea chatOutput;
 
 	private String email = "";
 	byte[] privkeyByte = null;
@@ -104,6 +110,8 @@ public class ChatClient implements ActionListener {
 	 * Initialize the contents of the frame.
 	 */
 	private void initialize() {
+		chatLogik = new ChatLogik();
+
 		f1 = new JFrame("Login");
 		f2 = new JFrame("Register");
 		f3 = new JFrame("Chat");
@@ -126,7 +134,7 @@ public class ChatClient implements ActionListener {
 		b6 = new JButton("Chat");
 		b6.setBounds(460, 5, 79, 25);
 
-		b7 = new JButton("Login");
+		b7 = new JButton("Logout");
 		b7.setBounds(260, 5, 88, 25);
 		b8 = new JButton("Register");
 		b8.setBounds(353, 5, 104, 25);
@@ -167,6 +175,7 @@ public class ChatClient implements ActionListener {
 
 		// hide Chat Button
 		b3.hide();
+		b6.hide();
 
 		/////////////////////////////////////////////////////////////////////////////////////////////
 		// 1
@@ -254,8 +263,11 @@ public class ChatClient implements ActionListener {
 							User user = new User();
 							user.setIdentity(alluser.getJSONObject(i).getString("identity"));
 							user.setPubkey_user(alluser.getJSONObject(i).getString("pubkey_user"));
-							userlist.add(user);
-							user_list.add(user.getIdentity());
+							if (!user.getIdentity().equals(email)) {
+								userlist.add(user);
+								user_list.add(user.getIdentity());
+							}
+
 						}
 
 					}
@@ -270,16 +282,12 @@ public class ChatClient implements ActionListener {
 		p3.add(getAll);
 
 		user_list = new List();
+
 		user_list.setForeground(Color.BLACK);
 		user_list.setFont(new Font("Tahoma", Font.BOLD, 16));
-		user_list.setBackground(Color.ORANGE);
+		user_list.setBackground(Color.WHITE);
 		user_list.setBounds(26, 85, 97, 347);
 		p3.add(user_list);
-
-		chatOutput = new JTextField();
-		chatOutput.setBounds(260, 54, 514, 316);
-		p3.add(chatOutput);
-		chatOutput.setColumns(10);
 
 		chatInput = new JTextField();
 		chatInput.setBounds(260, 381, 368, 20);
@@ -289,16 +297,33 @@ public class ChatClient implements ActionListener {
 		JButton sendBTN = new JButton("Send");
 		sendBTN.setBounds(638, 381, 136, 20);
 		p3.add(sendBTN);
+		sendBTN.setEnabled(false);
+		user_list.addItemListener(new ItemListener() {
+			public void itemStateChanged(ItemEvent e) {
+				sendBTN.setEnabled(true);
+				setMsgList();
+			}
+		});
 
-		JButton refreshBTN = new JButton("Refresh");
-		refreshBTN.setBounds(685, 25, 89, 23);
-		p3.add(refreshBTN);
+		JButton readBTN = new JButton("Read");
+		readBTN.setBounds(685, 25, 89, 23);
+		p3.add(readBTN);
 
-		List MSGList = new List();
+		MSGList = new List();
+		MSGList.addItemListener(new ItemListener() {
+			public void itemStateChanged(ItemEvent e) {
+				chatOutput.setText("");
+
+				// get Nachrichten ID
+				int index = MSGList.getSelectedItem().indexOf(".");
+				String msgid = MSGList.getSelectedItem().substring(0, index);
+				setMsgOutput(msgid);
+			}
+		});
 		MSGList.setForeground(Color.BLACK);
 		MSGList.setFont(new Font("Tahoma", Font.BOLD, 16));
-		MSGList.setBackground(Color.GREEN);
-		MSGList.setBounds(132, 85, 104, 347);
+		MSGList.setBackground(Color.WHITE);
+		MSGList.setBounds(132, 85, 122, 347);
 		p3.add(MSGList);
 
 		JLabel lblMsglist = new JLabel("MSGList");
@@ -309,6 +334,11 @@ public class ChatClient implements ActionListener {
 		JButton btnNewButton = new JButton("RefreshMSGList");
 		btnNewButton.setBounds(133, 52, 103, 26);
 		p3.add(btnNewButton);
+
+		chatOutput = new JTextArea();
+		chatOutput.setEditable(false);
+		chatOutput.setBounds(260, 54, 510, 314);
+		p3.add(chatOutput);
 
 		f1.setVisible(true);
 		f2.setVisible(false);
@@ -460,6 +490,7 @@ public class ChatClient implements ActionListener {
 			public void actionPerformed(ActionEvent e) {
 				BASE64Encoder myEncoder = new BASE64Encoder();
 				BASE64Decoder myDecoder2 = new BASE64Decoder();
+
 				String receiver = "";
 				String pubkey_recipient = "";
 				String inputText = "";
@@ -605,197 +636,58 @@ public class ChatClient implements ActionListener {
 					e1.printStackTrace();
 				}
 
+				// Nach senden Textbox wieder leer machen
+				chatInput.setText("");
+
 			}
 		});
 		// -------Click Listener RefreshNachrichten--------------------
-		refreshBTN.addActionListener(new ActionListener() {
+		readBTN.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
-				String sender = "";
-				String receiver = "";
-				String msgid = "";
-				BASE64Encoder myEncoder = new BASE64Encoder();
-				BASE64Decoder myDecoder2 = new BASE64Decoder();
-
 				chatOutput.setText("");
 
 				// get Nachrichten ID
 				int index = MSGList.getSelectedItem().indexOf(".");
-				msgid = MSGList.getSelectedItem().substring(0, index);
-
-				System.out.println(msgid);
-
-				// get timestamp
-				long unixTime = System.currentTimeMillis() / 1000L;
-				String strTime = Long.toString(unixTime);
-
-				// get PrivateKey
-				PrivateKey privateKey = null;
-				try {
-					EncodedKeySpec privateKeySpec = new PKCS8EncodedKeySpec(privkeyByte);
-					KeyFactory generator = KeyFactory.getInstance("RSA");
-					privateKey = generator.generatePrivate(privateKeySpec);
-				} catch (NoSuchAlgorithmException e3) {
-					e3.printStackTrace();
-				} catch (InvalidKeySpecException e1) {
-					e1.printStackTrace();
-				}
-
-				// get sig_message über identity und timestamp
-				String sig_messageDataString = email + strTime;
-				String sig_messageString = "";
-				byte[] data = sig_messageDataString.getBytes();
-				byte[] sig_message = null;
-
-				try {
-					Signature sig1 = Signature.getInstance("SHA256withRSA");
-					sig1.initSign(privateKey);
-					sig1.update(data);
-					sig_message = sig1.sign();
-				} catch (InvalidKeyException e2) {
-					e2.printStackTrace();
-				} catch (NoSuchAlgorithmException e2) {
-					e2.printStackTrace();
-				} catch (SignatureException e2) {
-					e2.printStackTrace();
-				}
-				sig_messageString = myEncoder.encode(sig_message);
-
-				JSONObject msgRec = new JSONObject();
-				Resty r = new Resty();
-				try {
-					msgRec = r.json("http://localhost:3000/" + email + "/showmsg",
-							form(data("sig_message", sig_messageString), data("message_id", msgid),
-									data("timestamp", strTime)))
-							.object();
-				} catch (Exception e1) {
-					e1.printStackTrace();
-				}
-
-				String cipherString = "";
-				String sig_recipientString = "";
-				String ivString = "";
-				String key_recipient_encString = "";
-				try {
-					// pubkey_recipient = pubkeyRec.getString("pubkey_user");
-					sender = msgRec.getString("identity");
-					cipherString = msgRec.getString("cipher");
-					sig_recipientString = msgRec.getString("sig_recipient");
-					ivString = msgRec.getString("iv");
-					key_recipient_encString = msgRec.getString("key_recipient_enc");
-				} catch (JSONException e1) {
-					e1.printStackTrace();
-				}
-
-				// get Pubkey from Identiy
-
-				JSONObject pubkeySen = new JSONObject();
-				String pubkey_senderString = "";
-				byte[] pubkey_recipientByte = null;
-				try {
-					pubkeySen = r.json("http://localhost:3000/" + sender + "/pubkey").object();
-				} catch (IOException e1) {
-					e1.printStackTrace();
-				} catch (JSONException e1) {
-					e1.printStackTrace();
-				}
-				try {
-					pubkey_senderString = pubkeySen.getString("pubkey_user");
-				} catch (JSONException e1) {
-					e1.printStackTrace();
-				}
-				PublicKey pubKey = null;
-				try {
-					pubkey_recipientByte = myDecoder2.decodeBuffer(pubkey_senderString);
-					pubKey = null;
-					pubKey = KeyFactory.getInstance("RSA").generatePublic(new X509EncodedKeySpec(pubkey_recipientByte));
-				} catch (InvalidKeySpecException | NoSuchAlgorithmException | IOException e4) {
-					e4.printStackTrace();
-				}
-
-				byte[] sig_recipientByte = null;
-				try {
-					sig_recipientByte = myDecoder2.decodeBuffer(sig_recipientString);
-
-					String digSignature = sender + cipherString + ivString + key_recipient_encString;
-					Signature sig2 = null;
-					try {
-						sig2 = Signature.getInstance("SHA256withRSA");
-						sig2.initVerify(pubKey);
-						sig2.update(digSignature.getBytes());
-						// System.out.println(sig2.verify(sig_recipientByte));
-					} catch (InvalidKeyException | NoSuchAlgorithmException | SignatureException e1) {
-						e1.printStackTrace();
-					}
-
-					if (sig2.verify(sig_recipientByte)) {
-						// zeige nachricht an
-						byte[] key_recipient_enc = myDecoder2.decodeBuffer(key_recipient_encString);
-						byte[] key_recipient = decrypt_rec_priv(privateKey, key_recipient_enc);
-
-						System.out.println("Tes: " + Arrays.toString(key_recipient));
-
-						// hole iv aus string
-						IvParameterSpec ivSpec = null;
-						byte[] ivByte = myDecoder2.decodeBuffer(ivString);
-						ivSpec = new IvParameterSpec(ivByte);
-
-						// entschlüssel nachricht
-						byte[] cipher_enc = myDecoder2.decodeBuffer(cipherString);
-						String msg = decryptMSG(key_recipient, cipher_enc, ivSpec);
-
-						System.out.println(msg);
-
-					} else {
-						chatOutput.setText("Signatur falsch");
-					}
-
-				} catch (IOException e1) {
-					e1.printStackTrace();
-				} catch (SignatureException e1) {
-					e1.printStackTrace();
-				}
+				String msgid = MSGList.getSelectedItem().substring(0, index);
+				setMsgOutput(msgid);
 
 			}
 		});
 		// -----Click getAllMSG---------------------
 		btnNewButton.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
-				String msgid = "";
+				setMsgList();
+			}
+		});
+	}
 
-				MSGList.clear();
-				JSONResource json = null;
-				JSONObject status = null;
-				JSONArray allmsg = null;
-				Resty r = new Resty();
-				String statusCode = "";
-				try {
-					try {
-						json = r.json("http://localhost:3000/" + email + "/showallmsg/");
-						status = json.object();
-					} catch (ClassCastException e3) {
-						allmsg = json.array();
+	public void setMsgOutput(String msgid) {
+		String msg = chatLogik.getMsg(msgid, email, privkeyByte);
+		chatOutput.append(msg);
+	}
+
+	public void setMsgList() {
+		MSGList.clear();
+		ArrayList<Message> allMsg = chatLogik.getAllMsg(email);
+
+		if (allMsg != null) {
+			for (int i = 0; i < allMsg.size(); i++) {
+				if (allMsg.get(i).getSender().equals(user_list.getSelectedItem())) {
+					if(allMsg.get(i).isRead()){
+						MSGList.add(allMsg.get(i).getId() + ". Von " + allMsg.get(i).getSender()+" (Read)");
 					}
-					if (status != null) {
-						statusCode = status.getString("status_code");
-						if (statusCode.equals("461")) {
-							MSGList.add("Keine Message gefunden");
-						}
-					} else {
-						ArrayList<Message> msglist = new ArrayList<Message>();
-						for (int i = 0; i < allmsg.length(); i++) {
-							Message msg = new Message();
-							msg.setId(allmsg.getJSONObject(i).getString("message_id"));
-							msg.setName(allmsg.getJSONObject(i).getString("identity"));
-							msglist.add(msg);
-							MSGList.add(msg.getId() + ". Von " + msg.getName());
-						}
+					else
+					{
+						MSGList.add(allMsg.get(i).getId() + ". Von " + allMsg.get(i).getSender());
 					}
-				} catch (Exception e5) {
-					e5.printStackTrace();
+					
 				}
 
 			}
-		});
+
+		} else {
+			MSGList.add("Keine Nachrichten gefunden");
+		}
 	}
 
 	private byte[] getSalt(int i) throws NoSuchAlgorithmException {
@@ -864,18 +756,6 @@ public class ChatClient implements ActionListener {
 		return null;
 	}
 
-	public byte[] decrypt_rec_priv(PrivateKey privKey, byte[] key_recipient_enc) {
-		try {
-			Cipher cipher = Cipher.getInstance("RSA");
-			cipher.init(Cipher.DECRYPT_MODE, privKey);
-			return cipher.doFinal(key_recipient_enc);
-		} catch (InvalidKeyException | NoSuchAlgorithmException | NoSuchPaddingException | IllegalBlockSizeException
-				| BadPaddingException e) {
-			e.printStackTrace();
-		}
-		return null;
-	}
-
 	public byte[] encryptMSG(byte[] key_recipient, String Nachricht, IvParameterSpec iv) {
 		byte[] clearText = null;
 
@@ -885,68 +765,27 @@ public class ChatClient implements ActionListener {
 			encryptCipher.init(Cipher.ENCRYPT_MODE, key_recipient_enc, iv);
 			clearText = Nachricht.getBytes("UTF-8");
 			return encryptCipher.doFinal(clearText);
-		} catch (InvalidKeyException e) {
-			e.printStackTrace();
-		} catch (NoSuchAlgorithmException e) {
-			e.printStackTrace();
-		} catch (NoSuchPaddingException e) {
-			e.printStackTrace();
-		} catch (InvalidAlgorithmParameterException e) {
-			e.printStackTrace();
-		} catch (UnsupportedEncodingException e) {
-			e.printStackTrace();
-		} catch (IllegalBlockSizeException e) {
-			e.printStackTrace();
-		} catch (BadPaddingException e) {
-			e.printStackTrace();
-		}
-
-		return null;
-
-	}
-
-	public String decryptMSG(byte[] key_recipient, byte[] cipher, IvParameterSpec iv) {
-		try {
-			SecretKey key_recipient_enc = new SecretKeySpec(key_recipient, 0, key_recipient.length, "AES");
-			Cipher cipher1 = Cipher.getInstance("AES/CBC/PKCS5Padding");
-			cipher1.init(Cipher.DECRYPT_MODE, key_recipient_enc, iv);
-			byte[] cleartextByte = cipher1.doFinal(cipher);
-			return new String(cleartextByte, "UTF-8");
 		} catch (InvalidKeyException | NoSuchAlgorithmException | NoSuchPaddingException
-				| InvalidAlgorithmParameterException | IllegalBlockSizeException | BadPaddingException
-				| UnsupportedEncodingException e) {
+				| InvalidAlgorithmParameterException | UnsupportedEncodingException | IllegalBlockSizeException
+				| BadPaddingException e) {
 			e.printStackTrace();
 		}
 		return null;
 	}
 
 	public byte[] decrypt(byte[] strToDecrypt, byte[] masterkey) {
-		// System.out.println("DECMaster: " + Arrays.toString(masterkey));
-		SecretKey masterkey_enc = new SecretKeySpec(masterkey, 0, masterkey.length, "AES");
 		try {
+			SecretKey masterkey_enc = new SecretKeySpec(masterkey, 0, masterkey.length, "AES");
 			Cipher cipher2 = Cipher.getInstance("AES/ECB/PKCS5Padding");
 			cipher2.init(Cipher.DECRYPT_MODE, masterkey_enc);
 			b3.setVisible(true);
 			return cipher2.doFinal(strToDecrypt);
-			// System.out.println("DECByte "+Arrays.toString(cipherData2));
-
-			// return new String(cipherData2);
-		} catch (InvalidKeyException e) {
-			// TODO Auto-generated catch block
+		} catch (InvalidKeyException | NoSuchAlgorithmException | NoSuchPaddingException | IllegalBlockSizeException
+				| BadPaddingException e) {
+			b3.setVisible(false);
 			e.printStackTrace();
-		} catch (NoSuchAlgorithmException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		} catch (NoSuchPaddingException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		} catch (IllegalBlockSizeException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		} catch (BadPaddingException e) {
-			// login failed
-			b3.setVisible(true);
 		}
+
 		return null;
 	}
 

@@ -2,13 +2,23 @@ package com.web;
 
 public class Message {
 	private String id;
-	private String name;
-	public String getName() {
-		return name;
+	private String sender;
+	private boolean read;
+	
+	public boolean isRead() {
+		return read;
 	}
 
-	public void setName(String name) {
-		this.name = name;
+	public void setRead(boolean read) {
+		this.read = read;
+	}
+
+	public String getSender() {
+		return sender;
+	}
+
+	public void setSender(String sender) {
+		this.sender = sender;
 	}
 
 	public String getId() {

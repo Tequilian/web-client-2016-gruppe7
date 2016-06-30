@@ -247,7 +247,7 @@ public class ChatClient implements ActionListener {
 				String statusCode = "";
 				try {
 					try {
-						json = r.json("http://localhost:3000/all");
+						json = r.json("http://web2016team7.herokuapp.com/all");
 						status = json.object();
 					} catch (ClassCastException e3) {
 						alluser = json.array();
@@ -422,7 +422,7 @@ public class ChatClient implements ActionListener {
 
 				// write to database
 				try {
-					new Resty().json("http://localhost:3000/",
+					new Resty().json("http://web2016team7.herokuapp.com/",
 							form(data("identity", email), data("salt_masterkey", saltString),
 									data("pubkey_user", pubString), data("privkey_user_enc", geheimPrivKey)));
 				} catch (Exception e1) {
@@ -441,7 +441,7 @@ public class ChatClient implements ActionListener {
 				Resty r = new Resty();
 				JSONObject user = new JSONObject();
 				try {
-					user = r.json("http://localhost:3000/" + email).object();
+					user = r.json("http://web2016team7.herokuapp.com/" + email).object();
 				} catch (IOException e1) {
 					e1.printStackTrace();
 				} catch (JSONException e1) {
@@ -507,7 +507,7 @@ public class ChatClient implements ActionListener {
 				Resty r = new Resty();
 				JSONObject pubkeyRec = new JSONObject();
 				try {
-					pubkeyRec = r.json("http://localhost:3000/" + receiver + "/pubkey").object();
+					pubkeyRec = r.json("http://web2016team7.herokuapp.com/" + receiver + "/pubkey").object();
 				} catch (IOException e1) {
 					e1.printStackTrace();
 				} catch (JSONException e1) {
@@ -554,7 +554,7 @@ public class ChatClient implements ActionListener {
 				// System.out.println("2:
 				// "+Arrays.toString(pubkey_recipientByte));
 
-				System.out.println("Tes: " + Arrays.toString(key_receipient));
+				//System.out.println("Tes: " + Arrays.toString(key_receipient));
 
 				byte[] key_recipient_enc = encrypt_rec_priv(pubkey_recipientByte, key_receipient);
 				String key_recipient_encString = "";
@@ -596,7 +596,7 @@ public class ChatClient implements ActionListener {
 				String strTime = Long.toString(unixTime);
 
 				// get sig_service
-				System.out.println("3: " + Arrays.toString(privkeyByte));
+				//System.out.println("3: " + Arrays.toString(privkeyByte));
 
 				byte[] sig_service = null;
 				String digSigService = receiver + email + nachrichtString + ivString + key_recipient_encString
@@ -627,7 +627,7 @@ public class ChatClient implements ActionListener {
 				// snede zum Server
 
 				try {
-					new Resty().json("http://localhost:3000/" + receiver + "/msg",
+					new Resty().json("http://web2016team7.herokuapp.com/" + receiver + "/msg",
 							form(data("sender", email), data("cipher", nachrichtString), data("iv", ivString),
 									data("key_recipient_enc", key_recipient_encString), data("timestamp", strTime),
 									data("sig_recipient", sig_recipientString),

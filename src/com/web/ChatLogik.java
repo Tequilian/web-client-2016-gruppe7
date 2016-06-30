@@ -54,7 +54,7 @@ public class ChatLogik {
 		String statusCode = "";
 		try {
 			try {
-				json = r.json("http://localhost:3000/" + identity + "/showallmsg/");
+				json = r.json("http://web2016team7.herokuapp.com/" + identity + "/showallmsg/");
 				status = json.object();
 			} catch (ClassCastException e3) {
 				allmsg = json.array();
@@ -133,7 +133,7 @@ public class ChatLogik {
 		JSONObject msgRec = new JSONObject();
 		Resty r = new Resty();
 		try {
-			msgRec = r.json("http://localhost:3000/" + email + "/showmsg",
+			msgRec = r.json("http://web2016team7.herokuapp.com/" + email + "/showmsg",
 					form(data("sig_message", sig_messageString), data("message_id", msgid),
 							data("timestamp", strTime)))
 					.object();
@@ -163,7 +163,7 @@ public class ChatLogik {
 		String pubkey_senderString = "";
 		byte[] pubkey_recipientByte = null;
 		try {
-			pubkeySen = r.json("http://localhost:3000/" + sender + "/pubkey").object();
+			pubkeySen = r.json("http://web2016team7.herokuapp.com/" + sender + "/pubkey").object();
 		} catch (IOException e1) {
 			e1.printStackTrace();
 		} catch (JSONException e1) {
